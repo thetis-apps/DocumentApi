@@ -13,14 +13,14 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['thetis-ims']
     HomePageUrl: https://github.com/thetis-apps/DocumentApi
-    SemanticVersion: 3.1.0
+    SemanticVersion: 3.2.1
     SourceCodeUrl: https://github.com/thetis-apps/DocumentApi
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
     Timeout: 30
-    Runtime: nodejs16.x
+    Runtime: nodejs24.x
 
 # Parameters of the application 
 Parameters:
@@ -73,7 +73,7 @@ Resources:
       StageName: Prod
       Cors:
         AllowHeaders: "'Access-Control-Allow-Origin,x-requested-with,content-type'"
-        AllowOrigin: !If [IsYarnliving, "'https://yarnliving.thetis-apps.net'", !If [IsCapida, "'https://capida.thetis-apps.net'", !If [IsLindeCables, "'https://lindecables.thetis-apps.net'", !Sub "'https://public-${ContextId}.thetis-apps.net'"]]]
+        AllowOrigin: !If [IsYarnliving, "'https://yarnliving.thetis-apps.net'", !If [IsCapida, "'https://capida.thetis-apps.net'", !If [IsLindeCables, "'https://lindecables.thetis-apps.net'", "'http://localhost:5173'" ]]]
       AccessLogSetting:
         DestinationArn: !GetAtt LogGroup.Arn
         Format: $context.identity.sourceIp,$context.identity.caller,$context.identity.user,$context.requestTime,$context.httpMethod,$context.resourcePath,$context.protocol,$context.status,$context.responseLength,$context.requestId,$context.extendedRequestId
@@ -111,6 +111,28 @@ Resources:
             Path: /pendingMultiPickingLists
             Method: get
             
+  Pick:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: api.pick
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /pick
+            Method: post
+
   GetPendingPutAwayLists:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:

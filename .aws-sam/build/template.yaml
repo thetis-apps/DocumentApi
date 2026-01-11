@@ -13,12 +13,12 @@ Metadata:
     Labels:
     - thetis-ims
     HomePageUrl: https://github.com/thetis-apps/DocumentApi
-    SemanticVersion: 3.0.10
+    SemanticVersion: 3.2.1
     SourceCodeUrl: https://github.com/thetis-apps/DocumentApi
 Globals:
   Function:
     Timeout: 30
-    Runtime: nodejs16.x
+    Runtime: nodejs24.x
 Parameters:
   ContextId:
     Type: String
@@ -55,6 +55,10 @@ Conditions:
     Fn::Equals:
     - Ref: ContextId
     - 572
+  IsLindeCables:
+    Fn::Equals:
+    - Ref: ContextId
+    - 736
 Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
@@ -74,7 +78,10 @@ Resources:
           - Fn::If:
             - IsCapida
             - '''https://capida.thetis-apps.net'''
-            - Fn::Sub: '''https://public-${ContextId}.thetis-apps.net'''
+            - Fn::If:
+              - IsLindeCables
+              - '''https://lindecables.thetis-apps.net'''
+              - '''http://localhost:5173'''
       AccessLogSetting:
         DestinationArn:
           Fn::GetAtt:
@@ -117,6 +124,29 @@ Resources:
             Method: get
     Metadata:
       SamResourceId: GetPendingMultiPickingLists
+  Pick:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: Pick
+      Handler: api.pick
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /pick
+            Method: post
+    Metadata:
+      SamResourceId: Pick
   GetPendingPutAwayLists:
     Type: AWS::Serverless::Function
     Properties:

@@ -16,7 +16,13 @@
  
 const axios = require('axios');
 
+let cachedIms = null;
+
 async function getIMS() {
+
+    if (cachedIms != null) {
+        return cachedIms;
+    }
 
     const authUrl = "https://auth.thetis-ims.com/oauth2/";
     const apiUrl = "https://api.thetis-ims.com/2/";
@@ -55,7 +61,9 @@ async function getIMS() {
 			}
 	    	return Promise.reject(error);
 		});
-		
+
+    cachedIms = ims;
+
     return ims;
 }
 
@@ -127,6 +135,22 @@ async function getPendingDocuments(ims, documentType, maxNumRows, extender) {
     return response;
 
 }
+
+exports.pick = async (event, context) => {
+    const ims = await getIMS();
+    const response = await ims.post('invocations/pick', event.body, { validateStatus: function (status) {
+            return status >= 200 && status < 300 || status === 422; // default
+        }});
+    return {
+        'statusCode': response.status,
+        'body': JSON.stringify(response.data),
+        'headers': {
+            'Access-Control-Allow-Origin': '*'
+        }
+    };
+
+}
+
 
 exports.getPendingMultiPickingLists = async (event, context) => {
     try {
