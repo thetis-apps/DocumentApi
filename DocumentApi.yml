@@ -1,0 +1,321 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Application that establishes an API suited for working with documents
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: thetis-ims-document-api
+    Description: Application that implements an API for handling documents created
+      by Thetis IMS
+    Author: thetis-apps
+    SpdxLicenseId: Apache-2.0
+    LicenseUrl: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/4612b8d5aa75b9b9936c9b7b9e6c7e82
+    ReadmeUrl: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/e4d65e9e63bea24bba30e61dce9edf27
+    Labels:
+    - thetis-ims
+    HomePageUrl: https://github.com/thetis-apps/DocumentApi
+    SemanticVersion: 3.2.1
+    SourceCodeUrl: https://github.com/thetis-apps/DocumentApi
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs24.x
+Parameters:
+  ContextId:
+    Type: String
+    Description: Context that this application is handling events for.
+    MinLength: '1'
+  ClientId:
+    Description: Key of the parameter that has your Thetis client id as its value.
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: ThetisClientId
+  ClientSecret:
+    Description: Key of the parameter that has your Thetis client secret as its value.
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: ThetisClientSecret
+  WebAcl:
+    Description: Key of the parameter that has a WAF to use for publicly exposed endpoints
+      as its value
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: ThetisWebAcl
+  ApiKey:
+    Description: The api key that gives access to the context in Thetis IMS.
+    Type: String
+    MinLength: 1
+  DevOpsEmail:
+    Description: The email address to send mail to when messages in the dead letter
+      queue.
+    Type: String
+    MinLength: 4
+Conditions:
+  IsYarnliving:
+    Fn::Equals:
+    - Ref: ContextId
+    - 628
+  IsCapida:
+    Fn::Equals:
+    - Ref: ContextId
+    - 572
+  IsLindeCables:
+    Fn::Equals:
+    - Ref: ContextId
+    - 736
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 14
+    Metadata:
+      SamResourceId: LogGroup
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      OpenApiVersion: 3.0.1
+      StageName: Prod
+      Cors:
+        AllowHeaders: '''Access-Control-Allow-Origin,x-requested-with,content-type'''
+        AllowOrigin:
+          Fn::If:
+          - IsYarnliving
+          - '''https://yarnliving.thetis-apps.net'''
+          - Fn::If:
+            - IsCapida
+            - '''https://capida.thetis-apps.net'''
+            - Fn::If:
+              - IsLindeCables
+              - '''https://lindecables.thetis-apps.net'''
+              - '''http://localhost:5173'''
+      AccessLogSetting:
+        DestinationArn:
+          Fn::GetAtt:
+          - LogGroup
+          - Arn
+        Format: $context.identity.sourceIp,$context.identity.caller,$context.identity.user,$context.requestTime,$context.httpMethod,$context.resourcePath,$context.protocol,$context.status,$context.responseLength,$context.requestId,$context.extendedRequestId
+      TracingEnabled: true
+      MethodSettings:
+      - LoggingLevel: ERROR
+        ResourcePath: /*
+        HttpMethod: '*'
+        MetricsEnabled: false
+    Metadata:
+      SamResourceId: Api
+  WebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn:
+        Fn::Sub: arn:aws:apigateway:${AWS::Region}::/restapis/${Api}/stages/${Api.Stage}
+      WebACLArn:
+        Ref: WebAcl
+    Metadata:
+      SamResourceId: WebAclAssociation
+  GetPendingMultiPickingLists:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.getPendingMultiPickingLists
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /pendingMultiPickingLists
+            Method: get
+    Metadata:
+      SamResourceId: GetPendingMultiPickingLists
+  Pick:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.pick
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /pick
+            Method: post
+    Metadata:
+      SamResourceId: Pick
+  GetPendingPutAwayLists:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.getPendingPutAwayLists
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /pendingPutAwayLists
+            Method: get
+    Metadata:
+      SamResourceId: GetPendingPutAwayLists
+  GetPendingReplenishmentLists:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.getPendingReplenishmentLists
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /pendingReplenishmentLists
+            Method: get
+    Metadata:
+      SamResourceId: GetPendingReplenishmentLists
+  GetPendingStockTakingLists:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.getPendingStockTakingLists
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /pendingStockTakingLists
+            Method: get
+    Metadata:
+      SamResourceId: GetPendingStockTakingLists
+  PutMultiPickingList:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.putMultiPickingList
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /multiPickingLists/{id}
+            Method: put
+    Metadata:
+      SamResourceId: PutMultiPickingList
+  PutPutAwayList:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.putPutAwayList
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /putAwayLists/{id}
+            Method: put
+    Metadata:
+      SamResourceId: PutPutAwayList
+  PutReplenishmentList:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.putReplenishmentList
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /replenishmentLists/{id}
+            Method: put
+    Metadata:
+      SamResourceId: PutReplenishmentList
+  PutStockTakingList:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1q52gionhjeg3/f5fb29f9db1f0ded65938f0fef850e45
+      Handler: api.putStockTakingList
+      Environment:
+        Variables:
+          ClientId:
+            Ref: ClientId
+          ClientSecret:
+            Ref: ClientSecret
+          ApiKey:
+            Ref: ApiKey
+      Events:
+        Request:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /stockTakingLists/{id}
+            Method: put
+    Metadata:
+      SamResourceId: PutStockTakingList
+Outputs:
+  Api:
+    Description: API Gateway endpoint URL for Prod stage for Multi Picking function
+    Value:
+      Fn::Sub: https://${Api}.execute-api.${AWS::Region}.amazonaws.com/Prod
